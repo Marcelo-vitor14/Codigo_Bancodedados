@@ -1,0 +1,95 @@
+CREATE SCHEMA IF NOT EXISTS sinaly_app;
+SET search_path TO sinaly_app, public;
+
+CREATE TABLE endereco (
+    id SERIAL PRIMARY KEY,
+    cep VARCHAR(9) NOT NULL,
+    rua VARCHAR(255) NOT NULL,
+    numero INTEGER NOT NULL,
+    cidade VARCHAR(100) NOT NULL,
+    estado CHAR(2) NOT NULL,
+    CONSTRAINT chk_estado_len CHECK (LENGTH(estado) = 2),
+    CONSTRAINT chk_numero_pos CHECK (numero >= 1)
+);
+
+CREATE TABLE usuarios (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(255) NOT NULL,
+    email VARCHAR(100) NOT NULL,
+    senha VARCHAR(128) NOT NULL,
+    telefone VARCHAR(15),
+    idade INT,
+    tipo_deficiencia VARCHAR(100),
+    tipo_usuario VARCHAR(50),
+    data_nascimento DATE NOT NULL,
+    data_cadastro TIMESTAMP DEFAULT NOW(),
+    id_endereco INTEGER NOT NULL,
+    progresso_atividade INTEGER DEFAULT 0,
+    atividades_pendentes INTEGER DEFAULT 0,
+    CONSTRAINT uk_usuarios_email UNIQUE (email),
+    CONSTRAINT chk_usuarios_idade CHECK (
+    data_nascimento <= (CURRENT_DATE - INTERVAL '15 years')
+    ),
+    CONSTRAINT fk_usuarios_endereco FOREIGN KEY (id_endereco)
+    REFERENCES endereco(id) ON DELETE RESTRICT
+);
+
+CREATE TABLE funcionario (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(150) NOT NULL,
+    cpf VARCHAR(14) NOT NULL,
+    rg VARCHAR(20),
+    email VARCHAR(120),
+    contato VARCHAR(15),
+    cargo VARCHAR(80),
+    funcao VARCHAR(80),
+    foto VARCHAR(300),
+    ativo BOOLEAN DEFAULT TRUE,
+    id_endereco INTEGER,
+    CONSTRAINT uk_func_cpf UNIQUE (cpf),
+    CONSTRAINT chk_func_cpf CHECK (LENGTH(cpf) = 14),
+    CONSTRAINT fk_func_endereco FOREIGN KEY (id_endereco)
+    REFERENCES endereco(id) ON DELETE RESTRICT
+);
+
+CREATE TABLE atividades (
+    id SERIAL PRIMARY KEY,
+    id_usuario INTEGER NOT NULL,
+    atividades_do_dia INTEGER DEFAULT 0,
+    atrasadas INTEGER DEFAULT 0,
+    realizadas INTEGER DEFAULT 0,
+    data_registro DATE DEFAULT CURRENT_DATE,
+    CONSTRAINT fk_atividades_usuario FOREIGN KEY (id_usuario)
+    REFERENCES usuarios(id) ON DELETE CASCADE
+);
+
+CREATE TABLE login (
+    id SERIAL PRIMARY KEY,
+    usuario VARCHAR(255) NOT NULL,
+    senha VARCHAR(128) NOT NULL,
+    data_cadastro DATE DEFAULT NOW(),
+    id_usuario INTEGER,
+    id_funcionario INTEGER,
+    CONSTRAINT uk_login_usuario UNIQUE (usuario),
+    CONSTRAINT fk_login_usuario FOREIGN KEY (id_usuario)
+    REFERENCES usuarios(id) ON DELETE CASCADE,
+    CONSTRAINT fk_login_funcionario FOREIGN KEY (id_funcionario)
+    REFERENCES funcionario(id) ON DELETE CASCADE,
+    CONSTRAINT chk_login_vinculo CHECK (
+    (id_usuario IS NOT NULL AND id_funcionario IS NULL) OR
+    (id_usuario IS NULL AND id_funcionario IS NOT NULL)
+    )
+);
+
+CREATE OR REPLACE FUNCTION sinaly_app.padroniza_login()
+RETURNS trigger AS $$
+BEGIN
+    NEW.usuario := UPPER(NEW.usuario);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_login_padronizacao
+BEFORE INSERT OR UPDATE ON sinaly_app.login
+FOR EACH ROW
+EXECUTE FUNCTION sinaly_app.padroniza_login();
